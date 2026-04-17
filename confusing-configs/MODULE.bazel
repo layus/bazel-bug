@@ -1,0 +1,9 @@
+"""Bazel module for a simple C++ application with transitions and path mapping."""
+
+module(
+    name = "app",
+    version = "1.0.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "bazel_skylib", version = "1.7.1")

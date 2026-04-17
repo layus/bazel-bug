@@ -1,0 +1,11 @@
+load("//:main.bzl", "repo_fail")
+
+repo_fail(
+    name = "terse",
+    verbose = False,
+)
+
+repo_fail(
+    name = "verbose",
+    verbose = True,
+)

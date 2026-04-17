@@ -1,0 +1,6 @@
+load("//:external.bzl", "external_repo")
+
+external_repo(
+    name = "volatile_repo",
+    deps = ["//:volatile.txt", "//:hello.txt"],
+)

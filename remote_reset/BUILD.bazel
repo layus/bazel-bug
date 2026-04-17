@@ -1,0 +1,6 @@
+
+
+alias(
+    name = "file",
+    actual = "@volatile_repo//:hello.txt",
+)

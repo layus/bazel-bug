@@ -1,0 +1,5 @@
+load("//:main.bzl", "dump_env")
+
+dump_env(
+    name = "debug",
+)

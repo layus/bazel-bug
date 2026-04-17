@@ -1,0 +1,9 @@
+# Bazel configuration for path mapping and build options
+
+# Enable output path mapping for cleaner paths
+build --experimental_output_paths=strip
+
+# Provide sensible defaults for C++ builds
+build --cxxopt=-std=c++17
+build --cxxopt=-Wall
+build --cxxopt=-Wextra
