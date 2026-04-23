@@ -1,0 +1,28 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//:bug_repro.bzl", create_cc_impl_library = "create_cc_lib_set")
+
+cc_library(
+    name = "comp_b",
+    srcs = ["stub.cpp"],
+    tags = ["manual"],
+    deps = ["//:target_platform_headers"],
+)
+
+cc_library(
+    name = "comp_a",
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "lib_a",
+    srcs = ["stub.cpp"],
+    tags = ["manual"],
+    deps = ["//:target_platform_headers"],
+)
+
+[create_cc_impl_library(
+    name = "_impl_%s" % n,
+    libs = [n],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+) for n in ["comp_b", "comp_a", "lib_a"]]

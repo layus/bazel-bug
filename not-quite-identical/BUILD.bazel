@@ -1,0 +1,249 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load(
+    "//:bug_repro.bzl",
+    "apply_variant_transition",
+    "cc_extract_link_deps_provider",
+    "cc_forward_providers",
+    "cc_resolve_lib_set",
+    "cc_retrieve_link_deps",
+    "convert_cc_link_deps_into_ccinfo",
+    "create_cc_lib_set",
+    "export_autogen_headers",
+    "gen_defs",
+    "require_cc_implementations",
+    "stub_proto_converter",
+    "yaml_generator",
+)
+
+string_flag(
+    name = "variant",
+    build_setting_default = "x1",
+    values = ["v_a", "x1"],
+    visibility = ["//visibility:public"],
+)
+
+string_flag(
+    name = "compiler",
+    build_setting_default = "clang",
+    visibility = ["//visibility:public"],
+)
+
+string_flag(
+    name = "app_name",
+    build_setting_default = "app",
+    values = ["app"],
+    visibility = ["//visibility:public"],
+)
+
+# --- Platforms ---
+platform(
+    name = "target_platform_linux",
+    constraint_values = ["@platforms//os:linux"],
+    flags = ["--//:compiler=clang"],
+    visibility = ["//visibility:private"],
+)
+
+platform(
+    name = "target_platform_x86_64",
+    constraint_values = ["@platforms//cpu:x86_64"],
+    parents = [":target_platform_linux"],
+    visibility = ["//visibility:public"],
+)
+
+# Modelled as x86_64 to keep llvm toolchain resolution.
+platform(
+    name = "target_platform_alt",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    flags = ["--//:compiler=gcc"],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "host",
+    parents = [":target_platform_x86_64"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "empty",
+    visibility = ["//visibility:public"],
+)
+
+# --- target_platform ---
+cc_library(
+    name = "target_platform_headers",
+    visibility = ["//visibility:public"],
+    deps = [":defs_lib"],
+)
+
+cc_resolve_lib_set(
+    name = "_target_platform_lib_set",
+    lib_names = ["printf", "handler_b"],
+)
+
+cc_retrieve_link_deps(
+    name = "_target_platform_impl_lib",
+    deps = require_cc_implementations(names = ["comp_a", "comp_b", "lib_a"]),
+    lib_names = ["comp_a", "comp_b", "lib_a"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "_target_platform_lib",
+    deps = [":target_platform_headers"],
+    linkstatic = True,
+    tags = ["manual"],
+)
+
+cc_extract_link_deps_provider(
+    name = "_target_platform.link-info",
+    deps = [":target_platform_headers"],
+    link_deps = [":_target_platform_lib_set", ":_target_platform_impl_lib"],
+    tags = ["manual"],
+)
+
+cc_forward_providers(
+    name = "target_platform",
+    target = ":_target_platform_lib",
+    link_dep = ":_target_platform.link-info",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+label_flag(
+    name = "lib_set",
+    build_setting_default = "//:variant_a_lib_set",
+    visibility = ["//visibility:public"],
+)
+
+# --- defs_lib ---
+gen_defs(
+    name = "defs",
+    product_definition = [],
+)
+
+export_autogen_headers(
+    name = "_defs_lib_autogen_headers",
+    headers = [":defs"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "defs_lib",
+    hdrs = [":_defs_lib_autogen_headers"],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+# --- yamlgen_common / widget chain ---
+# cfg=reset_configuration_default on stub_proto_converter/yaml_generator
+# creates the empty-diff config pair when reached via the two transition parents.
+yaml_generator(
+    name = "config_a_yaml",
+    tag = "a",
+    targets = [],
+    visibility = ["//visibility:public"],
+)
+
+stub_proto_converter(
+    name = "proto_definitions",
+    inputs = [":config_a_yaml"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "widget_headers",
+    hdrs = [":proto_definitions"],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+# --- variant_a_lib_set groups cc_libraries with cfg=cc_reset_transition ---
+cc_library(
+    name = "_widget_lib",
+    deps = [":widget_headers"],
+    tags = ["manual"],
+)
+
+cc_extract_link_deps_provider(
+    name = "_widget.link-info",
+    deps = [":widget_headers"],
+    tags = ["manual"],
+)
+
+cc_forward_providers(
+    name = "widget",
+    target = ":_widget_lib",
+    link_dep = ":_widget.link-info",
+    tags = ["manual"],
+)
+
+create_cc_lib_set(
+    name = "variant_a_lib_set",
+    libs = [":widget"],
+    tags = ["manual"],
+)
+
+# --- public_iface: deps on target_platform (path to defs_lib) ---
+cc_library(
+    name = "_public_iface_lib",
+    hdrs = ["public_iface.h"],
+    deps = [":target_platform"],
+    tags = ["manual"],
+)
+
+cc_extract_link_deps_provider(
+    name = "_public_iface.link-info",
+    deps = [":target_platform"],
+    tags = ["manual"],
+)
+
+cc_forward_providers(
+    name = "public_iface",
+    target = ":_public_iface_lib",
+    link_dep = ":_public_iface.link-info",
+    tags = ["manual"],
+)
+
+# --- merge_lib: the SECOND config path (applies cc_reset_transition) ---
+convert_cc_link_deps_into_ccinfo(
+    name = "merge_lib",
+    deps = [":public_iface"],
+    tags = ["manual"],
+)
+
+cc_test(
+    name = "test_binary",
+    srcs = ["test_binary.cpp"],
+    deps = [
+        ":public_iface",
+        ":merge_lib",
+    ],
+    tags = ["manual"],
+    testonly = False,
+)
+
+# --- apply_variant_transition: FIRST config path to defs_lib ---
+apply_variant_transition(
+    name = "v_tests",
+    srcs = ":test_binary",
+    platform = "//:target_platform_alt",
+    lib_set = "//:variant_a_lib_set",
+    variant_name = "v_a",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+# --- Top-level target that triggers the duplicate-paths collision ---
+filegroup(
+    name = "root_target",
+    srcs = [":v_tests"],
+    tags = ["manual"],
+    testonly = True,
+    visibility = ["//visibility:public"],
+)

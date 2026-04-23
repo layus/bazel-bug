@@ -1,0 +1,32 @@
+# Minimal .bazelrc for reproducing the Duplicate paths bug.
+
+# --- Path mapping (required to reproduce the bug) ---
+common --experimental_output_paths=strip
+common --modify_execution_info=CppCompile=+supports-path-mapping,CppModuleMap=+supports-path-mapping,CppArchive=+supports-path-mapping
+
+# --- Config-specific output directory naming (required to trigger collision) ---
+build --experimental_platform_in_output_dir
+build --experimental_output_directory_naming_scheme=diff_against_dynamic_baseline
+
+# --- Disk cache (required to reproduce the bug) ---
+common --disk_cache=~/.cache/bazel/disk-cache-prod
+
+# --- Baseline flag values (must differ from defaults) ---
+# The transitions move AWAY from these baselines into the two colliding configs.
+common --//:lib_set=//:variant_a_lib_set
+common --//:variant=x1
+common --//:compiler=clang
+
+# --- Platform toolchain resolution ---
+build --incompatible_enable_cc_toolchain_resolution
+build --host_platform=//:target_platform_x86_64
+
+# --- Exec/target config separation (improves cache hit) ---
+common --experimental_exclude_defines_from_exec_config
+common --incompatible_exclude_starlark_flags_from_exec_config
+
+# --- Misc ---
+build --verbose_failures
+common --check_visibility=false
+
+try-import %workspace%/.bazelrc.user
